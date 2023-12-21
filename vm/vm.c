@@ -69,7 +69,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page temp_page;
 	temp_page.va = va;
 
-	struct hash_elem *e = hash_find(&spt->pages, &temp_page.hash_elem);
+	struct hash_elem *e = hash_find(&spt->spt_hash, &temp_page.hash_elem);
 	if (e != NULL) {
 		page = hash_entry(e, struct page, hash_elem);
 	}
@@ -84,7 +84,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	int succ = false;
 	/* TODO: Fill this function. */
 
-	struct hash_elem *prev_elem = hash_insert(&spt->pages, &page->hash_elem);
+	struct hash_elem *prev_elem = hash_insert(&spt->spt_hash, &page->hash_elem);
 	if (prev_elem == NULL) {
 		succ = true;
 	}
@@ -125,6 +125,13 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
+	void *kva = palloc_get_page(PAL_USER); // user pool에서 새로운 physical page를 가져온다.
+
+	if (kva == NULL)   // page 할당 실패 -> 나중에 swap_out 처리
+		PANIC("todo"); // OS를 중지시키고, 소스 파일명, 라인 번호, 함수명 등의 정보와 함께 사용자 지정 메시지를 출력
+
+	frame = malloc(sizeof(struct frame)); // 프레임 할당
+	frame->kva = kva;                      // 프레임 멤버 초기화
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -166,6 +173,9 @@ bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	page = spt_find_page(&thread_current()->spt, va);
+	if (page == NULL)
+		return false;
 
 	return vm_do_claim_page (page);
 }
@@ -180,6 +190,8 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	struct thread *current = thread_current();
+  pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
 
 	return swap_in (page, frame->kva);
 }
@@ -204,7 +216,7 @@ page_less (const struct hash_elem *a_,
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	hash_init(&spt->pages, page_hash, page_less, NULL);
+	hash_init(spt, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
