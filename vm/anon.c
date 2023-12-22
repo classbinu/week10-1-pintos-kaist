@@ -21,7 +21,12 @@ static const struct page_operations anon_ops = {
 void
 vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
+	
 	swap_disk = NULL;
+	// for bitmap?
+	// swap_disk = disk_get(1,1);
+	// disk_size(swap_disk);
+	// and more...
 }
 
 /* Initialize the file mapping */
