@@ -6,19 +6,16 @@
  * This data structure is thoroughly documented in the Tour of
  * Pintos for Project 3.
  *
- * This is a standard hash table with chaining.  To locate an
- * element in the table, we compute a hash function over the
- * element's data and use that as an index into an array of
- * doubly linked lists, then linearly search the list.
- *
- * The chain lists do not use dynamic allocation.  Instead, each
- * structure that can potentially be in a hash must embed a
- * struct hash_elem member.  All of the hash functions operate on
- * these `struct hash_elem's.  The hash_entry macro allows
- * conversion from a struct hash_elem back to a structure object
- * that contains it.  This is the same technique used in the
- * linked list implementation.  Refer to lib/kernel/list.h for a
- * detailed explanation. */
+이것은 체인 기능이 있는 표준 해시 테이블입니다.  
+테이블에서 요소를 찾으려면 해당 요소의 데이터에 대한 해시 함수를 계산하고 
+이를 이중으로 연결된 목록 배열의 인덱스로 사용한 다음 목록을 선형적으로 검색합니다.
+ 
+ 체인 목록은 동적 할당을 사용하지 않습니다.  
+ 대신, 해시에 포함될 수 있는 각 구조체는 구조체 hash_elem 멤버를 포함해야 합니다.  
+ 모든 해시 함수는 이러한 `구조체  hash_elem`에서 작동합니다.  
+ hash_entry 매크로를 사용하면 구조체 hash_elem에서 이를 포함하는 구조체 객체로 다시 변환할 수 있습니다.  
+ 이는 링크된 목록 구현에 사용된 것과 동일한 기술입니다.  
+ 자세한 설명은 lib/kernel/list.h를 참조하세요. */
 
 #include <stdbool.h>
 #include <stddef.h>

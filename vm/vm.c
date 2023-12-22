@@ -180,6 +180,8 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+
+			
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -187,4 +189,48 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+/*project 3*/
+
+/*SPT에서 히값을 통해 value로 들어있는 페이지를 찾든, 테이블에 삽입하든 기본적으로
+ hash함수가 있어야 가상 주소를 hashed indes로 변환 할 수 있기에 이를 해주는 함수임.*/
+unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED)
+{
+	struct page *p = hash_entry(p_, struct page, helem);// 해당 page가 들어있는 해시 테이블 시작 주소를 가져옴
+	return hash_bytes(&p->va, sizeof p->va);
+}
+
+/*
+해시 테이블 내 두 페이지 요소에 대해 페이지의 주소값을 비교하는 함수
+*/
+
+unsigned page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
+{
+	struct page *a = hash_entry(a_, struct page, helem);
+	struct page *b = hash_entry(b_, struct page, helem);
+	return a->va < b->va;
+}
+
+/*
+해당 페이지에 들어있는 hash_elem 구조체를 인자로 받은 해시 테이블에 삽입하는 함수
+*/
+
+bool page_insert(struct hash *h, struct page *p) {
+	
+    if(!hash_insert(h, &p->helem))
+		return true;
+	else
+		return false;
+
+}
+
+/*page를 해시 테이블에서 제거하는 함수*/
+bool page_delete(struct hash *h, struct page *p) {
+	if(!hash_delete(h, &p->helem)) {
+		return true;
+	}
+	else
+		return false;
+
 }
