@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include <hash.h>
+#include "threads/mmu.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -70,7 +71,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			page_initializer = file_backed_initializer;
 			break;
 		}
-
 		uninit_new(p, upage, init, type, aux, page_initializer);
 		p->writable = writable;
 
@@ -90,8 +90,8 @@ spt_find_page(struct supplemental_page_table *spt, void *va)
 	page = malloc(sizeof(struct page));
 	struct hash_elem *e;
 
-	page->va = va;
-	e = hash_find(&spt, &page->hash_elem);
+	page->va = pg_round_down(va);
+	e = hash_find(&spt->spt_hash, &page->hash_elem);
 
 	return e != NULL ? hash_entry(e, struct page, hash_elem) : NULL;
 }
@@ -150,10 +150,15 @@ vm_get_frame(void)
 	/* TODO: Fill this function. */
 	void *kva = palloc_get_page(PAL_USER);
 
-	if (kva == NULL)
+	if (kva == NULL) {
 		PANIC("todo");
+	}
 
 	frame = malloc(sizeof(struct frame));
+
+	if (frame == NULL) {
+		PANIC("todo");
+	}
 
 	frame->kva = kva;
 	frame->page = NULL;
@@ -165,8 +170,9 @@ vm_get_frame(void)
 
 /* Growing the stack. */
 static void
-vm_stack_growth(void *addr UNUSED)
+vm_stack_growth(void *addr)
 {
+	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -176,8 +182,8 @@ vm_handle_wp(struct page *page UNUSED)
 }
 
 /* Return true on success */
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
-												 bool user UNUSED, bool write, bool not_present)
+bool vm_try_handle_fault(struct intr_frame *f, void *addr,
+												 bool user, bool write, bool not_present)
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
@@ -188,11 +194,21 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	if (not_present)
 	{
+		void *rsp = f->rsp;
+		if(!user) {
+			rsp = thread_current()->rsp;
+		}
+		if ((USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 <= addr && addr <= USER_STACK)){
+			vm_stack_growth(addr);
+		}
+		
 		page = spt_find_page(spt, addr);
-		if (page == NULL)
+		if (page == NULL) {
 			return false;
-		if (write == 1 && page->writable == 0)
+		}
+		if (write == 1 && page->writable == 0) {
 			return false;
+		}
 		return vm_do_claim_page(page);
 	}
 	return false;
@@ -231,7 +247,6 @@ vm_do_claim_page(struct page *page)
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct thread *current = thread_current();
 	pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
-
 	return swap_in(page, frame->kva);
 }
 
@@ -256,7 +271,7 @@ bool page_less(const struct hash_elem *a_,
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt)
 {
-	hash_init(spt, page_hash, page_less, NULL);
+	hash_init(&spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
