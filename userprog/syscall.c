@@ -46,9 +46,12 @@ syscall_init (void) {
 
 void check_address(void *addr) {
 	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
+	if (!is_user_vaddr(addr) || addr == NULL) {
 		exit(-1);
 	}
+	// if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
+	// 	exit(-1);
+	// }
 }
 
 int add_file_to_fd_table (struct file *file) {
