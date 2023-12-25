@@ -10,7 +10,7 @@ int process_exec (void *f_name);
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (struct thread *next);
-
+// #ifdef VM
 /*project 3*/
 // for load_segment - aux
 struct load_info {
@@ -21,6 +21,6 @@ struct load_info {
     uint32_t zero_bytes;
     bool writable;
 };
-
+// #endif
 
 #endif /* userprog/process.h */

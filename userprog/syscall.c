@@ -10,6 +10,8 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/vm.h"
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -45,10 +47,44 @@ syscall_init (void) {
 }
 
 void check_address(void *addr) {
+	
 	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
+	if(!is_user_vaddr(addr) || addr == NULL ) {
+		//printf("[check addr] fail in 1 or 2\n");
 		exit(-1);
 	}
+	// if(!spt_find_page(&t->spt, addr)){
+	// 	printf("[check addr] fail in 3\n");
+	// 	exit(-1);
+	// }
+	#ifdef VM
+	//printf("[check addr] start\n");
+	if(spt_find_page(&t->spt, addr)) {
+		//printf("[check addr] page is found in spt\n");
+		struct page* p = spt_find_page(&t->spt, addr);
+		enum vm_type page_type = page_get_type(p);
+		//printf("[check addr] passed page type: %d\n",page_type);
+
+		if(pml4_get_page(t->pml4 , addr)== NULL) {
+			//printf("[check addr] but page is not found in pml4\n");
+		} 
+		//printf("[check addr] passed page addr: %p / frame kva: %p \n", p->va, p->frame->kva);
+
+	}
+	if(spt_find_page(&t->spt, addr) == NULL) {
+		//printf("[check addr] fail in 3\n");
+		exit(-1);
+	}
+	#else
+	if(pml4_get_page(t->pml4 , addr)== NULL) {
+		//printf("[check addr] fail in 3\n");
+		exit(-1);
+	}
+	#endif
+	// if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
+	// 	printf("[check addr] addr is failed!\n");
+	// 	exit(-1);
+	// }
 }
 
 int add_file_to_fd_table (struct file *file) {
@@ -104,17 +140,22 @@ bool remove (const char *file) {
 }
 
 int open (const char *file) {
+	//printf("[syscall open] start with :%p \n", file);
 	check_address(file);
+	//printf("[syscall open] addr check passed\n");
 	lock_acquire(&file_lock);
 	struct file *file_info = filesys_open(file);
 	lock_release(&file_lock);
 	if (file_info == NULL) {
+		//printf("[syscall open] crushed, file_info:%d\n", file_info);
 		return -1;
 	}
 	int fd = add_file_to_fd_table(file_info);
 	if (fd == -1) {
+		//printf("[syscall open] crushed, fd:%d\n", fd);
 		file_close(file_info);
 	}
+	//printf("[syscall open] end with :%d\n", fd);
 	return fd;
 }
 
@@ -123,7 +164,11 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned length) {
+	//printf("[syscall read] start with :%d, %p \n", fd, buffer);
 	check_address(buffer);
+	//printf("[syscall read] check buffer+length start\n");
+	check_address((char*)buffer+length);
+	//printf("[syscall read] addr check passed\n");
 	int bytesRead = 0;
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
@@ -136,13 +181,18 @@ int read (int fd, void *buffer, unsigned length) {
 	} else if (fd == 1) {
 		return -1;
 	} else {
+		//printf("[syscall read] fd else start\n");
 		struct file *f = get_file_from_fd_table(fd);
+		//printf("[syscall read] f : %p\n", f);
 		if (f == NULL) {
+			//printf("[syscall read] f is NULL!\n");
 			return -1; 
 		}
+		//printf("[syscall read] fd bf lock\n");
 		lock_acquire(&file_lock);
 		bytesRead = file_read(f, buffer, length);
 		lock_release(&file_lock);
+		//printf("[syscall read] fd else end\n");
 	}
 	return bytesRead;
 }
@@ -237,6 +287,7 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_OPEN:
 			f->R.rax = open(f->R.rdi);
+			//printf("[syscall switch] fd?:%d\n", f->R.rax);
 			break;
 		case SYS_FILESIZE:
 			f->R.rax = filesize(f->R.rdi);
@@ -259,4 +310,5 @@ syscall_handler (struct intr_frame *f) {
 		default:
 			exit(-1);
 	}
+	//printf("[syscall] end \n");
 }

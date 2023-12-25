@@ -723,7 +723,7 @@ lazy_load_segment (struct page *page, void *aux) {
 		return false;
 	}
 	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
-	// free(aux);
+	free(aux);
 	//printf("[lazy load segment] end\n");
 	return true;
 

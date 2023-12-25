@@ -181,11 +181,13 @@ inode_remove (struct inode *inode) {
  * than SIZE if an error occurs or end of file is reached. */
 off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
+	//printf("[inode_read_ate] start\n");
 	uint8_t *buffer = buffer_;
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
 
 	while (size > 0) {
+		//printf("[inode_read_ate] while start\n");
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
@@ -197,31 +199,42 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 
 		/* Number of bytes to actually copy out of this sector. */
 		int chunk_size = size < min_left ? size : min_left;
-		if (chunk_size <= 0)
+		if (chunk_size <= 0){
+			//printf("[inode_read_ate] chunk_size <= 0\n");
 			break;
+		}
+			
 
 		if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) {
 			/* Read full sector directly into caller's buffer. */
+			//printf("[inode_read_ate] second if start\n");
 			disk_read (filesys_disk, sector_idx, buffer + bytes_read); 
 		} else {
 			/* Read sector into bounce buffer, then partially copy
 			 * into caller's buffer. */
+			//printf("[inode_read_ate] first else start\n");
 			if (bounce == NULL) {
+				//printf("[inode_read_ate] third if start and 'bounce == NULL'\n");
 				bounce = malloc (DISK_SECTOR_SIZE);
-				if (bounce == NULL)
-					break;
+				if (bounce == NULL) {
+					//printf("[inode_read_ate] bounce == NULL\n");
+					break;}
 			}
+			//printf("[inode_read_ate] 1\n");
 			disk_read (filesys_disk, sector_idx, bounce);
-			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
+			//printf("[inode_read_ate] 2\n");
+			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);//
+			//printf("[inode_read_ate] first else end\n");
 		}
 
 		/* Advance. */
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_read += chunk_size;
+		//printf("[inode_read_ate] while end\n");
 	}
 	free (bounce);
-
+	//printf("[inode_read_ate] end\n");
 	return bytes_read;
 }
 
