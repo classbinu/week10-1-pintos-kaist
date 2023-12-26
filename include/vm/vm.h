@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include "include/lib/kernel/list.h"
 #include "include/lib/kernel/hash.h"
+#include "threads/interrupt.h"
+#include "include/threads/mmu.h"
 #include "threads/palloc.h"
 
 enum vm_type {
@@ -51,18 +53,8 @@ struct page {
 	/* Your implementation */
 
 	/*project 3*/
-	struct hash_elem helem; //해시 테이블의 원소를 나타내는 구조체
-
-
-	// int ref_count; //해당 페이지를 참조하는 프로세스의 개수
-	// unsigned long flags; //페이지의 상태를 나타내는 플래그
-	// struct list_head* lru; //연결된 목록 또는 트리 노드를 나타내는 구조체 포인터
-	// struct vm_area_struct* vma; //해당 페이지가 속한 가상 주소 공간을 나타내는 구조체 포인터
-	// unsigned long age; //연령 정보를 나타내는 변수 (LRU 알고리즘에서 사용)
-	// unsigned long swap_slot; //스왑 슬롯 번호를 나타내는 변수
-	// int * pte; //페이지 테이블 엔트리를 나타내는 변수
-
-	//내 구현...?
+	struct hash_elem hash_elem; //해시 테이블의 원소를 나타내는 구조체
+	bool writable; //페이지가 쓰기 가능한지 여부를 나타내는 변수
 
 	/* 유형별 데이터가 유니온에 바인딩됩니다.
 	 * 각 함수는 현재 유니온을 자동으로 감지합니다.*/
@@ -80,6 +72,7 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -107,7 +100,7 @@ struct page_operations {
  * 이 구조체의 특정 설계를 따르도록 강요하고 싶지 않습니다.
  * 모든 설계는 여러분의 몫입니다. */
 struct supplemental_page_table {
-	struct hash spt_hash; /* Supplemental page table hash table */
+	struct hash pages; /* Supplemental page table hash table */
 
 };
 
@@ -132,5 +125,23 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
+
+
+/*Project 3*/
+unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED);
+unsigned page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+bool page_insert(struct hash *h, struct page *p);
+bool page_delete(struct hash *h, struct page *p);
+
+static struct frame *vm_get_frame (void);
+
+
+static void
+spt_destroy (struct hash_elem *e, void *aux UNUSED);
+void spt_destructor(struct hash_elem *e, void* aux);
+
+
+
+
 
 #endif  /* VM_VM_H */

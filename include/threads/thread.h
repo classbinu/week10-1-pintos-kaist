@@ -1,6 +1,7 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#include "lib/kernel/hash.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
@@ -123,10 +124,13 @@ struct thread {
 	struct list child_list;
 	struct list_elem child_elem;
 	struct semaphore wait_sema;
-	struct semaphore fork_sema;
+	struct semaphore fork_sema; // for fork
 	struct semaphore exit_sema;
-	int exit_status;
+	int exit_status; // 0: success, -1: fail
 	struct intr_frame parent_tf;
+
+	/* virtual memory */
+	struct hash page_table; /* Supplemental page table. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -135,6 +139,8 @@ struct thread {
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
+	void* stack_bottom;
+	void* rsp_stack;
 #endif
 
 	/* Owned by thread.c. */
