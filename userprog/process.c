@@ -20,13 +20,15 @@
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
+#include "vm/file.h"
 #endif
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
-
+/*project 2 and 3*/
+extern struct lock file_lock;
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
@@ -411,7 +413,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
-extern struct lock file_lock;
+
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	//printf("[load] 실행\n");

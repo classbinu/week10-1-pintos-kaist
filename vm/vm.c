@@ -46,6 +46,9 @@ unsigned page_hash (const struct hash_elem *p_, void *aux UNUSED);
 bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED); 
 struct page *page_lookup (const void *va, struct supplemental_page_table *spt);
 void page_free(struct hash_elem* e, void* aux);
+bool check_stack_boundary(uintptr_t rsp, void* fault_addr);
+/* frame table for frame management*/
+struct list frame_table;
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -54,11 +57,14 @@ bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
 
+	//printf("[vm이름 긴 것] start\n");
+
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	/* Check wheter the upage is already occupied or not. */
 	void* upage_va = upage;
 	if (spt_find_page (spt, upage) == NULL) {
+		//printf("[vm이름 긴 것] 찾는 주소: %p\n", upage_va);
 		/* Create the page, fetch the initialier according to the VM type*/
 		//struct page* new_page = calloc(1, sizeof(struct page));
 		struct page* new_page = malloc(sizeof(struct page));
@@ -67,15 +73,18 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		 /* TODO: and then create "uninit" page struct by calling uninit_new.*/ 
 		//struct uninit_page* new_uninit_page;
-		uninit_new(new_page, upage_va, init, type, aux, NULL);
+		//uninit_new(new_page, upage_va, init, type, aux, NULL);
 
 		 /* TODO: You should modify the field after calling the uninit_new. */
+		//type이름 그대로 써넣기, uninit new삭제
 		switch(VM_TYPE(type)) {
 			case(VM_ANON):
+				//printf("[vm이름 긴 것] ANON\n");
 				uninit_new(new_page, upage_va, init, type, aux, anon_initializer);
 				new_page->writable = writable;
 				break;
 			case(VM_FILE):
+				//printf("[vm이름 긴 것] VM_FILE\n");
 				uninit_new(new_page, upage_va, init, type, aux, file_backed_initializer);
 				new_page->writable = writable;
 				break;
@@ -87,6 +96,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			free(aux);
 			goto err;
 		}
+		//printf("[vm이름 긴 것] spt_insert_page passed\n");
 		return true;
 	}
 err:
@@ -123,17 +133,37 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
+	// struct thread* curr = thread_current();
+	// struct list_elem* e, *start;
 
+	// //순회를 돌며 가장 최근에 접근하지 않은 것들을 제거한다.
+	// for (start = e; start != list_end(&frame_table); start = list_next(start)) {
+	// 	victim = list_entry(start, struct frame, frame_elem);
+	// 	if (pml4_is_accessed(curr->pml4, victim->page->va))
+	// 		pml4_set_accessed(curr->pml4, victim->page->va, 0);
+	// 	else
+	// 		return victim;
+	// }
+
+	// for (start = list_begin(&frame_table); start != e; start = list_next(start)) {
+	// 	victim = list_entry(start, struct frame, frame_elem);
+	// 	if (pml4_is_accessed(curr->pml4, victim->page->va))
+	// 		pml4_set_accessed(curr->pml4, victim->page->va, 0);
+	// 	else
+	// 		return victim;
+	// }
+
+	// why e/start?
 	return victim;
-}
 
+}
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
-
+	swap_out(victim->page);
 	return NULL;
 }
 
@@ -168,9 +198,30 @@ vm_get_frame (void) {
 	return frame;
 }
 
+/* 
+하나 이상의 익명 페이지를 할당하여 스택 크기를 늘려 addr이 더 이상 오류 주소가 되지 않도록 합니다. 할당을 처리할 때 addr을 PGSIZE로 반내림해야 합니다.
+
+대부분의 운영체제에는 스택 크기에 대한 절대적인 제한이 있습니다. 일부 OS에서는 사용자가 제한을 조정할 수 있습니다(예: 많은 Unix 시스템에서 ulimit 명령어 사용). 많은 GNU/Linux 시스템에서 기본 제한은 8MB입니다. 이 프로젝트의 경우 스택 크기를 최대 1MB로 제한해야 합니다.
+
+
+*/
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	uintptr_t prd_addr = pg_round_down(addr);
+	//alloc first
+	// if(vm_alloc_page(VM_ANON|VM_MARKER_0, prd_addr, true)==NULL) {
+	// 	printf("[vm_stack_growth] first if failed\n");
+	// 	return false;
+	// }
+	//claim together
+	// if(vm_claim_page(prd_addr)==NULL) {
+	// 	printf("[vm_stack_growth] second if failed\n");
+	// 	return false;
+	// }
+	// return true;
+
+	vm_alloc_page(VM_ANON|VM_MARKER_0, prd_addr, true);
 }
 
 /* Handle the fault on write_protected page */
@@ -178,30 +229,73 @@ static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
 
+/*
+이 함수는 페이지 오류 예외를 처리하는 동안 userprog/exception.c의 page_fault에서 호출됩니다. 이 함수에서는 페이지 오류가 스택 증가에 유효한 경우인지 여부를 확인해야 합니다. 스택 증가로 오류를 처리할 수 있음을 확인했다면 오류가 발생한 주소로 vm_stack_growth를 호출합니다.
+*/
 /* Return true on success */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
+
+	//printf("[vm try fault] start : addr:%p / user:%d / write:%d, not present:%d\n", addr, user, write, not_present);
+	//printf("[vm try fault] curr->rsp: %p\n", thread_current()->intr_rsp);
 	/* TODO: Validate the fault */
+
 	// If addr is null
 	if(addr == NULL) {
+		//printf("[vm try fault error] addr == NULL\n");
 		return false;
 	}
 	// If address is in kernel 
 	if(is_kernel_vaddr(addr)) {
+		//printf("[vm try fault error] is_kernel_vaddr\n");
 		return false;
 	}
+
+	uintptr_t rsp = f->rsp;
+		//printf("[vm try fault /before !user] user: %d, rsp:%p\n", user, rsp);
+		
+		if(!user) {
+			/* user false: access by kernel.
+			when kernel access occured,
+			intr_frame's rsp !=user stack pointer
+			so get it from saved rsp from thread. */
+			//printf("[vm try fault] rsp is changed (f->rsp) => (curr->rsp)\n");
+			rsp = thread_current()->intr_rsp;
+		}
+		//printf("[vm try fault /after !user] user: %d, rsp:%p\n", user, rsp);
+
 	// if it is present but fault is occured
 	if(!not_present){
+		//printf("[vm try fault error]!not_present\n");
 		return false;
 	}
-	/* TODO: Your code goes here */
-	if((page =spt_find_page(spt, addr)) == NULL) {
-		//printf("[vm_try_handle_fault] page is NULL!\n");
-		false;
+	// same with (not_present == 1)
+	// if page is exist 
+	if((page =spt_find_page(spt, addr))==NULL) {
+		//printf("[vm try fault error] page: %p \n", page);
+		//printf("[vm try fault error] if page is not exist in spt\n");
+
+		if(check_stack_boundary(rsp, (uintptr_t)addr)) {
+			//printf("[vm try fault] check stack boundary is passed\n");
+			vm_stack_growth(addr);
+			return true;
+		}
+
+		//printf("[vm try fault error] checking stack_boundary is finished\n");
+		return false;
 	}
+
+
+	//printf("[vm try fault] page->writable: %d\n", page->writable);
+
+	if(write==true &&page->writable==false) {
+		//printf("[vm try fault error]write==true &&page->writable==false\n");
+		return false;
+	}
+	
 	return vm_do_claim_page (page);
 }
 
@@ -389,4 +483,20 @@ page_free(struct hash_elem* e, void* aux) {
 		return false;
 	}
 	vm_dealloc_page(page);
+}
+
+/* check address from rsp */
+bool
+check_stack_boundary (uintptr_t rsp, void* fault_addr) {
+	/*
+	fault_addr <= USER_STACK : USER STACK(시작점)아래 영역
+	fault_addr >= USER_STACK - (1<<20)(=1MB) :최대 stack영역내 주소
+	fault_addr >= rsp-8 : rsp이동 전에 exception이 나서 뜬 fault addr를 커버하기
+	*/
+	if((fault_addr <= USER_STACK) && (fault_addr >= USER_STACK - (1<<20)) && (fault_addr >= rsp-8)) {
+		//모든 조건 만족하여 범위 내임을 확인하였다
+		return true;
+	}
+	//printf("[check_stack_boundary] : not in boundary!\n");
+	return false;
 }

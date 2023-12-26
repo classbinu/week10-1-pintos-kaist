@@ -53,10 +53,7 @@ void check_address(void *addr) {
 		//printf("[check addr] fail in 1 or 2\n");
 		exit(-1);
 	}
-	// if(!spt_find_page(&t->spt, addr)){
-	// 	printf("[check addr] fail in 3\n");
-	// 	exit(-1);
-	// }
+
 	#ifdef VM
 	//printf("[check addr] start\n");
 	if(spt_find_page(&t->spt, addr)) {
@@ -86,6 +83,35 @@ void check_address(void *addr) {
 	// 	exit(-1);
 	// }
 }
+
+/* Validate given buffer by page size*/
+void validate_buffer(void* buffer, size_t size, bool is_writable) {
+	if (buffer == NULL) {
+		exit(-1);
+	}
+
+	if (buffer<= USER_STACK && buffer>=thread_current()->intr_rsp) {
+	return;
+	}
+
+	void* start_addr = pg_round_down(buffer);
+	void* end_addr = pg_round_down(buffer+size);
+
+	for (void* addr = end_addr; addr>=start_addr; addr-=PGSIZE) {
+		//check address's function
+		if(addr == NULL || is_kernel_vaddr(addr)) {
+			exit(-1);
+		}
+		struct page* traget_page= spt_find_page(&thread_current()->spt, addr);
+		if(traget_page == NULL) {
+			exit(-1);
+		}
+	
+		if(traget_page->writable == false && is_writable ==true) {
+			exit(-1);
+		}
+	}
+	}
 
 int add_file_to_fd_table (struct file *file) {
 	struct thread *t = thread_current();
@@ -131,6 +157,8 @@ int wait (tid_t tid) {
 
 bool create (const char *file, unsigned initial_size) {
 	check_address(file);
+	//validate_buffer(file, initial_size, true);
+	//lock_acquire(&file_lock);
 	return filesys_create(file, initial_size);
 }
 
@@ -165,10 +193,9 @@ int filesize (int fd) {
 
 int read (int fd, void *buffer, unsigned length) {
 	//printf("[syscall read] start with :%d, %p \n", fd, buffer);
-	check_address(buffer);
-	//printf("[syscall read] check buffer+length start\n");
-	check_address((char*)buffer+length);
-	//printf("[syscall read] addr check passed\n");
+	//check_address(buffer);
+	validate_buffer(buffer, length, true);
+
 	int bytesRead = 0;
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
@@ -188,6 +215,7 @@ int read (int fd, void *buffer, unsigned length) {
 			//printf("[syscall read] f is NULL!\n");
 			return -1; 
 		}
+		
 		//printf("[syscall read] fd bf lock\n");
 		lock_acquire(&file_lock);
 		bytesRead = file_read(f, buffer, length);
@@ -206,7 +234,8 @@ struct file *get_file_from_fd_table (int fd) {
 }
 
 int write (int fd, const void *buffer, unsigned length) {
-	check_address(buffer);
+	//check_address(buffer);
+	validate_buffer(buffer, length, true);
 	int bytesRead = 0;
 
 	if (fd == 0) {
@@ -261,6 +290,12 @@ void close (int fd) {
 void
 syscall_handler (struct intr_frame *f) {
 	//printf("[syscall number] %d\n", f->R.rax);
+	#ifdef VM
+	/* When switched into kernel mode, 
+	   save stack pointer in thread'*/
+	thread_current()->intr_rsp = f->rsp;
+	//printf("[syscall checking] curr intr_rsp %p,\n",thread_current()->intr_rsp);
+	#endif
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt();
