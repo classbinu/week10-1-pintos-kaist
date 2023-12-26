@@ -9,8 +9,9 @@
 struct container
 {
     struct file *file;
-    off_t * offset;
+    off_t offset;
     size_t page_read_bytes;
+    size_t page_zero_bytes;
 };
 
 
@@ -26,11 +27,11 @@ void process_activate (struct thread *next);
 
 bool setup_stack (struct intr_frame *if_);
 bool install_page (void *upage, void *kpage, bool writable);
-bool
+static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) ;
-bool lazy_load_segment (struct page *page, void *aux);
-bool setup_stack (struct intr_frame *if_) ;
+static bool lazy_load_segment (struct page *page, void *aux);
+
 
 #endif
 

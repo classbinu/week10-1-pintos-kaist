@@ -1,11 +1,14 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+
 #include "include/lib/kernel/list.h"
 #include "include/lib/kernel/hash.h"
 #include "threads/interrupt.h"
 #include "include/threads/mmu.h"
 #include "threads/palloc.h"
+
+typedef int tid_t;
 
 enum vm_type {
 	/* page not initialized */
@@ -104,7 +107,7 @@ struct supplemental_page_table {
 
 };
 
-#include "threads/thread.h"
+
 void supplemental_page_table_init (struct supplemental_page_table *spt);
 bool supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src);
@@ -129,7 +132,7 @@ enum vm_type page_get_type (struct page *page);
 
 /*Project 3*/
 unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED);
-unsigned page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 bool page_insert(struct hash *h, struct page *p);
 bool page_delete(struct hash *h, struct page *p);
 

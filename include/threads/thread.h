@@ -140,7 +140,10 @@ struct thread {
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
 	void* stack_bottom;
-	void* rsp_stack;
+	void* rsp_stack; //stack grow 할 때 사용
+	/* Svaing rsp into struct thread on the initial transition
+	 * from user to kernel mode */
+	uintptr_t saved_sp;
 #endif
 
 	/* Owned by thread.c. */

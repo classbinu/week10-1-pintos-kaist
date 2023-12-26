@@ -4,10 +4,10 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "userprog/process.h"
+#include "include/threads/vaddr.h"
 
 struct list frame_table; //프레임 테이블
 struct list_elem *start; //프레임 테이블의 시작 주소
-
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -70,12 +70,12 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			case VM_FILE:
 				initializer = file_backed_initializer;
 				break;
-			default:
-				goto err;
 		}
 		/* TODO: Insert the page into the spt. */
 		uninit_new(page, upage, init, type, aux, initializer);
+		//page number initialization
 		page->writable = writable;
+		// hex_dump(page->va, page->va, PGSIZE, true);
 		return spt_insert_page(spt, page);
 	}
 err:
@@ -98,6 +98,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	page->va = pg_round_down(va); //해당 va가 속해있는 페이지 시작 주소를 갖는 page를 만든다.
 
 	/* e와 같은 해시값을 갖는 page를 spt에서 찾은 다음 해당 hash_elem을 리턴 */
+
 	e = hash_find(&spt->pages, &page->hash_elem);
 	free(page);
 
@@ -220,9 +221,7 @@ vm_dealloc_page (struct page *page) {
 /* Claim the page that allocate on VA. */
 bool
 vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function */
-	page = spt_find_page(&thread_current()->spt,va);
+	struct page *page = spt_find_page(&thread_current()->spt,va);
 	if(page == NULL) return false;
 	
 	return vm_do_claim_page (page);
@@ -249,10 +248,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	
-	struct hash* page_table = malloc(sizeof (struct hash));
-	hash_init (page_table, page_hash, page_less, NULL);
-	spt -> pages = *page_table;
+	hash_init(&(spt->pages), page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -346,7 +342,7 @@ unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED)
 a가 b보다 작으면 true, 반대면 false
 */
 
-unsigned page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
+bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
 {
 	struct page *a = hash_entry(a_, struct page, hash_elem);
 	struct page *b = hash_entry(b_, struct page, hash_elem);
