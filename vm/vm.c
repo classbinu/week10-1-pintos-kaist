@@ -271,13 +271,14 @@ bool page_less(const struct hash_elem *a_,
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt)
 {
-	hash_init(&spt->spt_hash, page_hash, page_less, NULL);
+	hash_init(spt, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 																	struct supplemental_page_table *src UNUSED)
 {
+
 }
 
 /* Free the resource hold by the supplemental page table */
