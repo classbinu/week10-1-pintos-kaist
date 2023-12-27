@@ -1,6 +1,7 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+#include <string.h>
 
 #include "include/lib/kernel/list.h"
 #include "include/lib/kernel/hash.h"
@@ -139,8 +140,6 @@ bool page_delete(struct hash *h, struct page *p);
 static struct frame *vm_get_frame (void);
 
 
-static void
-spt_destroy (struct hash_elem *e, void *aux UNUSED);
 void spt_destructor(struct hash_elem *e, void* aux);
 
 

@@ -229,20 +229,20 @@ vm_claim_page (void *va UNUSED) {
 
 /* Claim the PAGE and set up the mmu. */
 static bool
-vm_do_claim_page (struct page *page) {
-	struct frame *frame = vm_get_frame ();
+vm_do_claim_page(struct page *page)
+{
+    struct frame *frame = vm_get_frame();
 
-	/* Set links */
-	frame->page = page;
-	page->frame = frame;
+    /* Set links */
+    frame->page = page;
+    page->frame = frame;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	if(install_page(page->va,frame->kva,page->writable))
-	{
-		return swap_in(page, frame->kva);
-	}
-	return false;
+    /* TODO: Insert page table entry to map page's VA to frame's PA. */
+    // 가상 주소와 물리 주소를 매핑
+    struct thread *current = thread_current();
+    pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
 
+    return swap_in(page, frame->kva); // uninit_initialize
 }
 
 /* Initialize new supplemental page table */
@@ -257,70 +257,57 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
 			// Project 3.2_anonymous page
 	struct hash_iterator i;
-	hash_first(&i, &src->pages);
+	struct hash *src_hash = &src->pages;
+    struct hash *dst_hash = &dst->pages;
+	hash_first(&i, src_hash);
 	while(hash_next(&i))
 	{
-		
-		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
-
-		enum vm_type type = page_get_type(parent_page);
-		void *upage = parent_page->va;
-		bool writable = parent_page->writable;
-		vm_initializer *init = parent_page->uninit.init;
-		void* aux = parent_page->uninit.aux;
-
-		if(parent_page->uninit.type & VM_MARKER_0)
+		struct page *src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		enum vm_type type = page_get_type(src_page);
+		if(type == VM_UNINIT)
 		{
-			setup_stack(&thread_current()->tf);
-		}
-		else if(parent_page->operations->type == VM_UNINIT)
-		{
-			if(!vm_alloc_page_with_initializer(type, upage, writable, init, aux))
-				return false;
+			struct uninit_page *uninit_page = &src_page->uninit;
+			struct container* container = (struct container *) uninit_page->aux;
+			struct container* new_container = (struct container *) malloc(sizeof(struct container));
+			new_container->file = file_duplicate(container->file); //file_duplicate()를 통해 파일을 복사
+
+			vm_alloc_page_with_initializer(uninit_page->type, src_page->va, src_page->writable, file_backed_initializer, new_container);
+			vm_claim_page(src_page->va);
 		}
 		else
-		{ // UNIT이 아니면 spt 추가만
-			if(!vm_alloc_page(type,upage, writable))
-				return false;
-			if(!vm_claim_page(upage))
-				return false;
-		}
-		if(parent_page->operations->type != VM_UNINIT)
 		{
-			struct page* child_page = spt_find_page(dst,upage);
-			memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+			vm_alloc_page(type, src_page->va, src_page->writable);
+			vm_claim_page(src_page->va);
+			memcpy(src_page->va,src_page->frame->kva, PGSIZE); //src_page->va에 src_page->frame->kva를 복사
 		}
 	}
 	return true;
 }
 
 void spt_destructor(struct hash_elem *e, void* aux) {
-    const struct page *p = hash_entry(e, struct page, hash_elem);
-    free(p);
+    struct page* page = hash_entry(e, struct page, hash_elem);
+    if (page != NULL) {
+        destroy(page);  // 페이지에 할당된 자원을 해제하는 함수 호출
+        free(page);  // 페이지 자체의 동적 메모리 해제
+    }
 }
 
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* 할 일: 스레드별로 보관 중인 보충_페이지_테이블을 모두 삭제하고 수정된 모든 내용을 스토리지에 다시 씁니다.  */
+	 // hash_action_destroy 콜백 함수를 사용하여 각 엔트리의 자원을 해제
 	hash_clear(&spt->pages, spt_destructor);
 }
 
-static void
-spt_destroy (struct hash_elem *e, void *aux UNUSED){
-	struct page *page = hash_entry (e, struct page, hash_elem);
-	ASSERT (page != NULL);
-	destroy (page);
-	free (page);
-}
 
 /*project 3*/
 
 /*SPT에서 히값을 통해 value로 들어있는 페이지를 찾든, 테이블에 삽입하든 기본적으로
  hash함수가 있어야 가상 주소를 hashed indes로 변환 할 수 있기에 이를 해주는 함수임.*/
-unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED)
+unsigned page_hash(const struct hash_elem *e, void *aux UNUSED)
 {
-	struct page *p = hash_entry(p_, struct page, hash_elem);// 해당 page가 들어있는 해시 테이블 시작 주소를 가져옴
+	struct page *p = hash_entry(e, struct page, hash_elem);// 해당 page가 들어있는 해시 테이블 시작 주소를 가져옴
 	return hash_bytes(&p->va, sizeof p->va);
 }
 

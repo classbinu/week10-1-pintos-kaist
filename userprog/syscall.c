@@ -46,9 +46,34 @@ syscall_init (void) {
 
 void check_address(void *addr) {
 	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
+	if(!is_user_vaddr(addr) || addr == NULL ) {
+		//printf("[check addr] fail in 1 or 2\n");
 		exit(-1);
 	}
+	#ifdef VM
+	//printf("[check addr] start\n");
+	if(spt_find_page(&t->spt, addr)) {
+		//printf("[check addr] page is found in spt\n");
+		struct page* p = spt_find_page(&t->spt, addr);
+		enum vm_type page_type = page_get_type(p);
+		//printf("[check addr] passed page type: %d\n",page_type);
+
+		if(pml4_get_page(t->pml4 , addr)== NULL) {
+			//printf("[check addr] but page is not found in pml4\n");
+		} 
+		//printf("[check addr] passed page addr: %p / frame kva: %p \n", p->va, p->frame->kva);
+
+	}
+	if(spt_find_page(&t->spt, addr) == NULL) {
+		//printf("[check addr] fail in 3\n");
+		exit(-1);
+	}
+	#else
+	if(pml4_get_page(t->pml4 , addr)== NULL) {
+		//printf("[check addr] fail in 3\n");
+		exit(-1);
+	}
+	#endif
 }
 
 int add_file_to_fd_table (struct file *file) {

@@ -206,8 +206,8 @@ error:
 	exit(TID_ERROR);
 }
 
-/*  현재 실행 컨텍스트를 f_name으로 전환합니다.
- * 실패하면 -1을 반환합니다.*/
+/* Switch the current execution context to the f_name.
+ * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
 	char *file_name = (char *)palloc_get_page(PAL_ZERO);
@@ -686,21 +686,19 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	struct container * container = (struct container*) aux;
-	if(page == NULL) return false;
 
-	if(container->page_read_bytes <= 0) return false;
-	file_seek(container->file, container->offset);
+	struct container* cont = (struct container *) aux;
 
-	if (file_read(container->file, page->frame->kva, container->page_read_bytes) != (int)container->page_read_bytes) {
+	file_seek(cont->file, cont->offset);  // 파일을 오프셋(ofs) 위치로 이동
+	if (file_read(cont->file, page->frame->kva, cont->page_read_bytes) != (int)cont->page_read_bytes) {  // 파일에서 페이지로 데이터 읽기
 		vm_dealloc_page(page);
-		free(container);
-        return false;
-    }
-    memset(page->va + container->page_read_bytes, 0, container->page_zero_bytes);
-	file_close(container->file);
-	free(container);
-    return true;
+		free(cont);
+		return false;  
+	}
+	memset(page->frame->kva + cont->page_read_bytes, 0, cont->page_zero_bytes);  // 읽어들인 바이트 이후의 메모리를 0으로 초기화
+	free(cont);  // 컨테이너 자원 해제
+ 
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -742,9 +740,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		container->page_zero_bytes = page_zero_bytes;
 		//project3.2_end
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, container)) {
+					writable, lazy_load_segment, container))
+		 {
+			free(container);
 			return false;
-					}
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
@@ -760,22 +760,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 bool
 setup_stack (struct intr_frame *if_) {
-	bool success = false;
+
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)) {    // type, upage, writable
-		success = vm_claim_page(stack_bottom);
+	if (!vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)) return false;
+
+	if(! vm_claim_page(stack_bottom)) 
+	{
+		vm_dealloc_page(stack_bottom);
+		return false;
+	}
+	if_->rsp = USER_STACK;
+    thread_current()->stack_bottom = stack_bottom;
 		
-		if (success) {
-			if_->rsp = USER_STACK;
-            thread_current()->stack_bottom = stack_bottom;
-		}
-    }
-	return success;
+    
+	return true;
 }
 
 
