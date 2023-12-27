@@ -691,12 +691,11 @@ lazy_load_segment (struct page *page, void *aux) {
 
 	file_seek(cont->file, cont->offset);  // 파일을 오프셋(ofs) 위치로 이동
 	if (file_read(cont->file, page->frame->kva, cont->page_read_bytes) != (int)cont->page_read_bytes) {  // 파일에서 페이지로 데이터 읽기
-		vm_dealloc_page(page);
-		free(cont);
+		palloc_free_page(page->frame->kva);
 		return false;  
 	}
 	memset(page->frame->kva + cont->page_read_bytes, 0, cont->page_zero_bytes);  // 읽어들인 바이트 이후의 메모리를 0으로 초기화
-	free(cont);  // 컨테이너 자원 해제
+	// free(cont);  // 컨테이너 자원 해제 //함부로 해제 말자....
  
 	return true;
 }
