@@ -18,6 +18,9 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+
+#define VM
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -203,8 +206,8 @@ error:
 	exit(TID_ERROR);
 }
 
-/* Switch the current execution context to the f_name.
- * Returns -1 on fail. */
+/*  현재 실행 컨텍스트를 f_name으로 전환합니다.
+ * 실패하면 -1을 반환합니다.*/
 int
 process_exec (void *f_name) {
 	char *file_name = (char *)palloc_get_page(PAL_ZERO);
@@ -683,19 +686,20 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	struct file *file = ((struct container *)aux)->file;
-	off_t offsetof = ((struct container *)aux)->offset;
-	size_t page_read_bytes = ((struct container *)aux)->page_read_bytes;
-    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+	struct container * container = (struct container*) aux;
+	if(page == NULL) return false;
 
-	file_seek(file, offsetof);
+	if(container->page_read_bytes <= 0) return false;
+	file_seek(container->file, container->offset);
 
-    if (file_read(file, page->frame->kva, page_read_bytes) != (int)page_read_bytes) {
-		palloc_free_page(page->frame->kva);
+	if (file_read(container->file, page->frame->kva, container->page_read_bytes) != (int)container->page_read_bytes) {
+		vm_dealloc_page(page);
+		free(container);
         return false;
     }
-    memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
-
+    memset(page->va + container->page_read_bytes, 0, container->page_zero_bytes);
+	file_close(container->file);
+	free(container);
     return true;
 }
 
@@ -735,8 +739,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		container->file = file;
 		container->page_read_bytes = page_read_bytes;
 		container->offset = ofs;
+		container->page_zero_bytes = page_zero_bytes;
 		//project3.2_end
-		void *aux = NULL;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, container)) {
 			return false;

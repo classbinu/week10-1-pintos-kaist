@@ -302,21 +302,8 @@ void spt_destructor(struct hash_elem *e, void* aux) {
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
-	struct hash_iterator i;
-	hash_first(&i, &spt->pages);
-	while(hash_next(&i))
-	{
-		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		if(page->operations->type == VM_FILE)
-		{
-			do_munmap(page->va);
-			//destroy(page);
-		}
-		//free(page);
-	}
-	hash_destroy(&spt->pages, spt_destructor);
+	/* 할 일: 스레드별로 보관 중인 보충_페이지_테이블을 모두 삭제하고 수정된 모든 내용을 스토리지에 다시 씁니다.  */
+	hash_clear(&spt->pages, spt_destructor);
 }
 
 static void
