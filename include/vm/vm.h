@@ -63,6 +63,7 @@ struct page {
 	/* project 3 */
 	struct hash_elem hash_elem; /* Hash table element. */
 	bool writable;
+	int mapped_page_count;
 };
 
 /* The representation of "frame" */

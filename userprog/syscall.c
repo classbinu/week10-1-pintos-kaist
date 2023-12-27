@@ -86,12 +86,15 @@ void check_address(void *addr) {
 
 /* Validate given buffer by page size*/
 void validate_buffer(void* buffer, size_t size, bool is_writable) {
+	//printf("[validate_buffer] buffer:%p, size:%d, is_writable:%d\n", buffer, size, is_writable);
 	if (buffer == NULL) {
+		//printf("[validate_buffer] buffer == NULL\n");
 		exit(-1);
 	}
 
 	if (buffer<= USER_STACK && buffer>=thread_current()->intr_rsp) {
-	return;
+		//printf("[validate_buffer] case 2\n");
+		return;
 	}
 
 	void* start_addr = pg_round_down(buffer);
@@ -100,15 +103,28 @@ void validate_buffer(void* buffer, size_t size, bool is_writable) {
 	for (void* addr = end_addr; addr>=start_addr; addr-=PGSIZE) {
 		//check address's function
 		if(addr == NULL || is_kernel_vaddr(addr)) {
+			//printf("[validate_buffer] case 3\n");
 			exit(-1);
 		}
+
+		//check_address(addr);
 		struct page* traget_page= spt_find_page(&thread_current()->spt, addr);
+		//printf("[validate buffer] traget_page->writable: %d \n", traget_page->writable);
+
 		if(traget_page == NULL) {
+			//printf("[validate_buffer] case 4\n");
 			exit(-1);
 		}
 	
-		if(traget_page->writable == false && is_writable ==true) {
-			exit(-1);
+		if(traget_page->writable == false && is_writable==true) {
+
+			//printf("[validate_buffer] case 5\n");
+
+			//printf("[validate buffer] traget_page->writable: %d \n", traget_page->writable);
+			//printf("[validate buffer] is_writable: %d \n", is_writable);
+
+			//printf("mmap clean out issue out\n");
+			exit(-1);		
 		}
 	}
 	}
@@ -158,8 +174,11 @@ int wait (tid_t tid) {
 bool create (const char *file, unsigned initial_size) {
 	check_address(file);
 	//validate_buffer(file, initial_size, true);
-	//lock_acquire(&file_lock);
-	return filesys_create(file, initial_size);
+	lock_acquire(&file_lock);
+	bool res = filesys_create(file, initial_size);
+	lock_release(&file_lock);
+
+	return res;
 }
 
 bool remove (const char *file) {
@@ -235,22 +254,29 @@ struct file *get_file_from_fd_table (int fd) {
 
 int write (int fd, const void *buffer, unsigned length) {
 	//check_address(buffer);
-	validate_buffer(buffer, length, true);
+	//printf("[syscall write] fd:%d\n", fd);
+	validate_buffer(buffer, length, false);
 	int bytesRead = 0;
+	//printf("[syscall write] validate_buffer end\n");
 
 	if (fd == 0) {
+		//printf("[syscall write] fd = %d\n", fd);
 		return -1;
 	} else if (fd == 1) {
 		putbuf(buffer, length);
+		//printf("[syscall write] bytesRead:%d\n", length);
 		return length;
 	} else {
 		struct file *f = get_file_from_fd_table(fd);
 		if (f == NULL) {
+			//printf("[syscall write] f = %p\n", f);
 			return -1;
 		}
 		lock_acquire(&file_lock);
 		bytesRead = file_write(f, buffer, length);
 		lock_release(&file_lock);
+		//printf("[syscall write] lock finished\n");
+		
 	}
 	return bytesRead;
 }
@@ -282,6 +308,116 @@ void close (int fd) {
 	}
 	file_close(fdt[fd]);
 	fdt[fd] = NULL;
+}
+
+void *
+mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	//printf("[mmap] addr:%p / length:%d / writable:%d / fd:%d /offset: %d \n", addr, length, writable, fd, offset);
+	struct file* target_file = get_file_from_fd_table(fd);
+
+	// the file descriptors representing console input and output are not mappable
+	if (fd == 0 || fd == 1) {
+		//printf("[mmap] fail case 6 \n");
+		return NULL;
+		//exit(-1);
+	}
+
+	if(target_file == NULL) {
+		//printf("[mmap] fail case 1 \n");
+		//file이 존재하지 않을 때 실패
+		return NULL;
+	}
+
+	//printf("[mmap] file's address: %p / size: %d\n", target_file, file_length(target_file));
+
+	/* check fail cases bf do_mmap*/
+	//if the file opened as fd has a length of zero bytes.
+	if(file_length(target_file)==0) {
+		//printf("[mmap] fail case 2 \n");
+		return NULL;
+	}
+
+	/* page-aligned issues */
+	// if offset(the starting point of file) is not page-aligned
+	if(offset % PGSIZE != 0) {
+		//printf("[mmap] fail case 3 \n");
+		return NULL;
+	}
+	//if the addr(the starting point of addr) is not page-aligned
+	// if(((uint64_t)addr % PGSIZE != 0)) {
+	// 	return NULL;
+	// }
+	if (pg_round_down(addr) != addr || is_kernel_vaddr(addr)){
+		//printf("[mmap] fail case 4 \n");
+		return NULL;
+	}
+        
+
+	/* addr / length /fd issue */
+	// if addr is 0, it must fail, because some Pintos code assumes virtual page 0 is not mapped.
+	// Your mmap should also fail when length is zero
+	if(addr == 0 || (long long)length <= 0) {
+		//printf("[mmap] fail case 5 \n");
+		return NULL;
+	}
+	
+	/* vm overlapping issues */
+
+	/* if the range of pages mapped overlaps any existing set of mapped pages */ 
+	// overlaps pages mapped at executable load time
+	if(spt_find_page(&thread_current()->spt, addr)) {
+		//printf("[mmap] fail case 7 \n");
+		return NULL;
+	}
+
+	//printf("[mmap] start do mmap \n");
+	void* res = do_mmap(addr, length, writable, target_file, offset);
+
+	if (res == NULL) {
+		return NULL;
+	}
+
+	struct page* p = spt_find_page(&thread_current()->spt, res);
+	//printf("[mmap] ending page found : %p\n", p);
+	struct load_info* container = p->uninit.aux;
+	//printf("[mmap] container file addr:%p, addr:%p, container->read_bytes: %d, container->ofs:%d \n", container->file, addr, container->read_bytes, container->ofs);
+	
+
+	return res;
+	//return do_mmap(addr, length, writable, target_file, offset);
+
+}
+
+void
+munmap (void *addr) {
+	// //printf("[munmap] start at %p \n", addr);
+	// check_address(addr);
+	// // printf("[munmap] checkaddr passed \n");
+	// // struct page* page = spt_find_page(&thread_current()->spt, addr);
+	// // printf("[munmap] page found %p \n", page);
+	// // if(page==NULL || page_get_type(page)!=VM_FILE) {
+	// // 	return NULL;
+	// // }
+
+	// struct page* p = spt_find_page(&thread_current()->spt, addr);
+	// //printf("[mmap] page found : %p\n", p);
+	// struct load_info* container = p->uninit.aux;
+	// //printf("[munmap] container file addr:%p, addr:%p, container->read_bytes: %d, container->ofs:%d \n", container->file, addr, container->read_bytes, container->ofs);
+
+	//lock_acquire(&file_lock);
+	do_munmap(addr);
+	//lock_release(&file_lock); 	
+	//printf("[munmap] end\n");
+
+	// struct supplemental_page_table *spt = &thread_current()->spt;
+    // struct page *p = spt_find_page(spt, addr);
+    // int count = p->mapped_page_count;
+    // for (int i = 0; i < count; i++) {
+    //     if (p) destroy(p);
+
+    //     addr += PGSIZE;
+    //     p = spt_find_page(spt, addr);
+    // }
 }
 
 
@@ -316,6 +452,7 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_CREATE:
 			f->R.rax = create(f->R.rdi, f->R.rsi);
+			//printf("[syscall] created file:%p \n", f->R.rax);
 			break;
 		case SYS_REMOVE:
 			f->R.rax = remove(f->R.rdi);
@@ -342,6 +479,14 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			close(f->R.rdi);
 			break;
+		/* project 3 : mmap and unmmap */
+		case SYS_MMAP:
+			{f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			break;}
+		case SYS_MUNMAP:
+			{void* res = f->R.rdi;
+			munmap(f->R.rdi);
+			break;}
 		default:
 			exit(-1);
 	}

@@ -110,6 +110,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
 	page = page_lookup(va, spt);
+	//printf("[spt find page] page:%p\n", page);
 
 	return page;
 }
@@ -438,9 +439,27 @@ err:
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread */
+	
+
+	// /* TODO: writeback all the modified contents to the storage. */
+	// struct hash_iterator i;
+	// hash_first (&i, &spt->spt_hash);
+	// while (hash_next (&i)) {
+	// 	struct page* target_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+
+	// 	if(target_page->operations->type == VM_FILE) {
+	// 		do_munmap(target_page->va);
+	// 	}
+
+	// // 	destroy(target_page);
+	// }
+	// hash_destroy(&spt->spt_hash, page_free);
+	//hash_clear(&spt->spt_hash, page_free);
+	
+	
 	hash_clear(&spt->spt_hash, page_free);
 
-	/* TODO: writeback all the modified contents to the storage. */
+	//hash_destroy(&spt->spt_hash, page_free);
 }
 
 /* project 3 */

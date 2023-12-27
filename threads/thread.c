@@ -669,6 +669,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	// // t->fd_table[1] = 1;
 	// t->next_fd = 2;
 	// t->fd_table -= 2;
+
+	
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
