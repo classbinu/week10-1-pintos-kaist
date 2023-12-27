@@ -78,6 +78,40 @@ void check_address(void *addr) {
 	#endif
 }
 
+/* Validate given buffer by page size*/
+void validate_buffer(void* buffer, size_t size, bool is_writable) {
+	//printf("[validate_buffer] buffer:%p, size:%d, is_writable:%d\n", buffer, size, is_writable);
+	if (buffer == NULL) {
+		//printf("[validate_buffer] buffer == NULL\n");
+		exit(-1);
+	}
+
+	if (buffer<= USER_STACK && buffer>=thread_current()->rsp) {
+		return;
+	}
+
+	void* start_addr = pg_round_down(buffer);
+	void* end_addr = pg_round_down(buffer+size);
+
+	for (void* addr = end_addr; addr>=start_addr; addr-=PGSIZE) {
+		//check address's function
+		if(addr == NULL || is_kernel_vaddr(addr)) {
+			exit(-1);
+		}
+
+		//check_address(addr);
+		struct page* traget_page= spt_find_page(&thread_current()->spt, addr);
+
+		if(traget_page == NULL) {
+			exit(-1);
+		}
+	
+		if(traget_page->writable == false && is_writable==true) {
+			exit(-1);		
+		}
+	}
+	}
+
 int add_file_to_fd_table (struct file *file) {
 	struct thread *t = thread_current();
 	struct file **fdt = t->fd_table;
@@ -122,7 +156,11 @@ int wait (tid_t tid) {
 
 bool create (const char *file, unsigned initial_size) {
 	check_address(file);
-	return filesys_create(file, initial_size);
+	lock_acquire(&file_lock);
+	bool res = filesys_create(file, initial_size);
+	lock_release(&file_lock);
+
+	return res;
 }
 
 bool remove (const char *file) {
@@ -150,8 +188,9 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned length) {
-	check_address(buffer);
-	check_address(buffer + length - 1);
+	// check_address(buffer);
+	// check_address(buffer + length - 1);
+	validate_buffer(buffer, length, true);
 	int bytesRead = 0;
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
@@ -184,7 +223,7 @@ struct file *get_file_from_fd_table (int fd) {
 }
 
 int write (int fd, const void *buffer, unsigned length) {
-	check_address(buffer);
+	validate_buffer(buffer, length, false);
 	
 	int bytesRead = 0;
 
@@ -234,36 +273,71 @@ void close (int fd) {
 	fdt[fd] = NULL;
 }
 
-void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
-{
-    // if (!addr || addr != pg_round_down(addr))
-    //     return NULL;
+void *
+mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	//printf("[mmap] addr:%p / length:%d / writable:%d / fd:%d /offset: %d \n", addr, length, writable, fd, offset);
+	struct file* target_file = get_file_from_fd_table(fd);
 
-    // if (offset != pg_round_down(offset))
-    //     return NULL;
+	// the file descriptors representing console input and output are not mappable
+	if (fd == 0 || fd == 1) {
+		//printf("[mmap] fail case 6 \n");
+		return NULL;
+		//exit(-1);
+	}
 
-    // if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length))
-    //     return NULL;
+	if(target_file == NULL) {
 
-    // if (spt_find_page(&thread_current()->spt, addr))
-    //     return NULL;
+		return NULL;
+	}
 
-    // struct file *f = process_get_file(fd);
-    // if (f == NULL)
-    //     return NULL;
 
-    // if (file_length(f) == 0 || (int)length <= 0)
-    //     return NULL;
+	if(file_length(target_file)==0) {
+		//printf("[mmap] fail case 2 \n");
+		return NULL;
+	}
 
-    // return do_mmap(addr, length, writable, f, offset); // 파일이 매핑된 가상 주소 반환
+	if(offset % PGSIZE != 0) {
+		//printf("[mmap] fail case 3 \n");
+		return NULL;
+	}
+
+	if (pg_round_down(addr) != addr || is_kernel_vaddr(addr)){
+		//printf("[mmap] fail case 4 \n");
+		return NULL;
+	}
+        
+
+	if(addr == 0 || (long long)length <= 0) {
+		//printf("[mmap] fail case 5 \n");
+		return NULL;
+	}
+	
+
+	if(spt_find_page(&thread_current()->spt, addr)) {
+		//printf("[mmap] fail case 7 \n");
+		return NULL;
+	}
+
+
+	void* res = do_mmap(addr, length, writable, target_file, offset);
+
+	if (res == NULL) {
+		return NULL;
+	}
+
+	return res;
+
 }
-
+void
+munmap (void *addr) {
+	do_munmap(addr);
+}
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) {
 	#ifdef VM
 	//printf("[syscall handler] start\n");
-	thread_current()->rsp_stack = f->rsp;
+	thread_current()->rsp = f->rsp;
 	#endif
 	switch (f->R.rax) {
 		case SYS_HALT:
@@ -310,9 +384,12 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			close(f->R.rdi);
 			break;
-		// case SYS_MMAP:
-		// 	f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
-		// 	break;
+		case SYS_MMAP:
+			f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			munmap(f->R.rdi);
+			break;
 		default:
 			exit(-1);
 	}

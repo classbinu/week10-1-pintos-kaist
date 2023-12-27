@@ -59,6 +59,7 @@ struct page {
 	/*project 3*/
 	struct hash_elem hash_elem; //해시 테이블의 원소를 나타내는 구조체
 	bool writable; //페이지가 쓰기 가능한지 여부를 나타내는 변수
+	int mapped_page_count; //매핑된 페이지의 개수를 나타내는 변수
 
 	/* 유형별 데이터가 유니온에 바인딩됩니다.
 	 * 각 함수는 현재 유니온을 자동으로 감지합니다.*/
@@ -137,6 +138,10 @@ bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux
 bool page_insert(struct hash *h, struct page *p);
 bool page_delete(struct hash *h, struct page *p);
 
+struct page* page_lookup (const void *va, struct supplemental_page_table *spt);
+void page_free(struct hash_elem* e, void* aux);
+bool
+check_stack_boundary (uintptr_t rsp, void* fault_addr) ;
 static struct frame *vm_get_frame (void);
 
 

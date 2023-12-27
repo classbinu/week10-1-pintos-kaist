@@ -224,7 +224,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
         // 페이지 폴트가 스택 확장에 대한 유효한 경우인지를 확인한다.
         void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
         if (!user)            // kernel access인 경우 thread에서 rsp를 가져와야 한다.
-            rsp = thread_current()->rsp_stack;
+            rsp = thread_current()->rsp;
 
         // 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
         if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
@@ -280,7 +280,11 @@ vm_do_claim_page(struct page *page)
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	hash_init(&(spt->pages), page_hash, page_less, NULL);
+	struct hash* target_ht = &spt->pages;
+	// (1) init hash table
+	if(! hash_init(target_ht, page_hash, page_less, NULL)) {
+		return NULL;
+	}
 }
 
 /* Copy supplemental page table from src to dst */
@@ -384,5 +388,45 @@ bool page_delete(struct hash *h, struct page *p) {
 		return false;
 
 }
+
+/*해시 테이블에서 주어진 가상 주소를 키로 갖는 페이지를 찾는 함수*/
+struct page *
+page_lookup (const void *va, struct supplemental_page_table *spt) {
+  //printf("[page_lookup] start\n");
+  struct page p;
+  struct hash_elem *e;
+
+  p.va = pg_round_down(va);
+  e = hash_find (&spt->pages, &p.hash_elem);
+  return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
+}
+
+/* Free the page containing the given hash elem, or a null pointer if no such page exists. The page will be freed by vm_dealloc_page because the actual page table(pml4) and the physical memory(palloc-ed memory) will be cleaned after SPT is cleaned up.*/
+void
+page_free(struct hash_elem* e, void* aux) {
+	struct page* page = hash_entry(e, struct page, hash_elem);
+	if(page == NULL) {
+		printf("[page_free] hash_entry is failed\n");
+		return false;
+	}
+	vm_dealloc_page(page);
+}
+
+/* check address from rsp */
+bool
+check_stack_boundary (uintptr_t rsp, void* fault_addr) {
+	/*
+	fault_addr <= USER_STACK : USER STACK(시작점)아래 영역
+	fault_addr >= USER_STACK - (1<<20)(=1MB) :최대 stack영역내 주소
+	fault_addr >= rsp-8 : rsp이동 전에 exception이 나서 뜬 fault addr를 커버하기
+	*/
+	if((fault_addr <= USER_STACK) && (fault_addr >= USER_STACK - (1<<20)) && (fault_addr >= rsp-8)) {
+		//모든 조건 만족하여 범위 내임을 확인하였다
+		return true;
+	}
+	//printf("[check_stack_boundary] : not in boundary!\n");
+	return false;
+}
+
 
 
