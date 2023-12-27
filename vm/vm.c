@@ -188,6 +188,17 @@ vm_get_frame (void)
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	void *stack_bottom = pg_round_down (addr);
+	size_t req_stack_size = USER_STACK - (uintptr_t)stack_bottom;
+	if (req_stack_size > (1 << 20)) PANIC("Stack limit exceeded!\n"); // 최대 1MB
+
+	// Alloc page from tested region to previous claimed stack page.
+	void *growing_stack_bottom = stack_bottom;
+	while ((uintptr_t) growing_stack_bottom < USER_STACK && 
+		vm_alloc_page (VM_ANON | VM_MARKER_0, growing_stack_bottom, true)) {
+	      growing_stack_bottom += PGSIZE;
+	};
+	vm_claim_page (stack_bottom); // Lazy load requested stack page only
 }
 
 /* Handle the fault on write_protected page */
@@ -196,18 +207,39 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
-bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	// struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-	if(is_kernel_vaddr(addr)) return false;
-	if(!not_present) return false;
-	if(!vm_claim_page(addr)) return false;
+bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
+                         bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
+{
+    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+    struct page *page = NULL;
+    if (addr == NULL)
+        return false;
 
-	return true;
+    if (is_kernel_vaddr(addr))
+        return false;
+
+    if (not_present) // 접근한 메모리의 physical page가 존재하지 않은 경우
+    {
+        /* TODO: Validate the fault */
+        // 페이지 폴트가 스택 확장에 대한 유효한 경우인지를 확인한다.
+        void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
+        if (!user)            // kernel access인 경우 thread에서 rsp를 가져와야 한다.
+            rsp = thread_current()->rsp_stack;
+
+        // 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
+        if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
+            vm_stack_growth(addr);
+        else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
+            vm_stack_growth(addr);
+
+        page = spt_find_page(spt, addr);
+        if (page == NULL)
+            return false;
+        if (write == 1 && page->writable == 0) // write 불가능한 페이지에 write 요청한 경우
+            return false;
+        return vm_do_claim_page(page);
+    }
+    return false;
 }
 
 /* Free the page.

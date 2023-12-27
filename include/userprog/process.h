@@ -4,7 +4,7 @@
 
 #include "threads/thread.h"
 #include "filesys/off_t.h"
-
+typedef int tid_t;
 //project 3
 struct container
 {

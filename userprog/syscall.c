@@ -11,6 +11,8 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
+#include "vm/vm.h"
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file *get_file_from_fd_table (int fd);
@@ -149,6 +151,7 @@ int filesize (int fd) {
 
 int read (int fd, void *buffer, unsigned length) {
 	check_address(buffer);
+	check_address(buffer + length - 1);
 	int bytesRead = 0;
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
@@ -156,7 +159,7 @@ int read (int fd, void *buffer, unsigned length) {
 			((char *)buffer)[i] = c;
 			bytesRead++;
 
-			if (c == '\n') break;
+			if (c == '\n' || c == '\0') break;
 		}
 	} else if (fd == 1) {
 		return -1;
@@ -182,6 +185,7 @@ struct file *get_file_from_fd_table (int fd) {
 
 int write (int fd, const void *buffer, unsigned length) {
 	check_address(buffer);
+	
 	int bytesRead = 0;
 
 	if (fd == 0) {
@@ -230,11 +234,37 @@ void close (int fd) {
 	fdt[fd] = NULL;
 }
 
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+    // if (!addr || addr != pg_round_down(addr))
+    //     return NULL;
 
+    // if (offset != pg_round_down(offset))
+    //     return NULL;
+
+    // if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length))
+    //     return NULL;
+
+    // if (spt_find_page(&thread_current()->spt, addr))
+    //     return NULL;
+
+    // struct file *f = process_get_file(fd);
+    // if (f == NULL)
+    //     return NULL;
+
+    // if (file_length(f) == 0 || (int)length <= 0)
+    //     return NULL;
+
+    // return do_mmap(addr, length, writable, f, offset); // 파일이 매핑된 가상 주소 반환
+}
 
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) {
+	#ifdef VM
+	//printf("[syscall handler] start\n");
+	thread_current()->rsp_stack = f->rsp;
+	#endif
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt();
@@ -280,6 +310,9 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			close(f->R.rdi);
 			break;
+		// case SYS_MMAP:
+		// 	f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		// 	break;
 		default:
 			exit(-1);
 	}
