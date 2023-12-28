@@ -32,7 +32,6 @@ extern struct lock file_lock;
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
-	//printf("[process_init]실행\n");
 	struct thread *current = thread_current ();
 }
 
@@ -210,7 +209,6 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	//printf("[process_exec] 실행\n");
 	char *file_name = (char *)palloc_get_page(PAL_ZERO);
 	strlcpy(file_name, (char *)f_name, strlen(f_name) + 1);
 	bool success;
@@ -231,15 +229,13 @@ process_exec (void *f_name) {
     int argc = 0;
 	tokenizer(file_name, argv, &argc);
 	/* project 2: argument passing */
-	//printf("[process_exec] tokenizer end\n");
+
 
 	/* And then load the binary */
 	success = load (file_name, &_if);
-	//printf("[process_exec] load end: %d\n", success);
 
 	/* If load failed, quit. */
 	if (!success) {
-		//printf("[process_exec] load failed\n");
 		palloc_free_page (file_name);
 		return -1;
 	}
@@ -251,16 +247,11 @@ process_exec (void *f_name) {
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK-_if.rsp, true);
 	/* project 2: argument passing */
 
-	//printf("[process_exec] stacker end\n");
-
 	palloc_free_page (file_name);
-	//printf("[process_exec] palloc free page end\n");
 
 	/* Start switched process. */
 	do_iret (&_if);
-	//printf("[process_exec] do_iret end\n");
 	NOT_REACHED ();
-	//printf("process_exec end\n");
 }
 
 
@@ -416,7 +407,6 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 static bool
 load (const char *file_name, struct intr_frame *if_) {
-	//printf("[load] 실행\n");
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -427,7 +417,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL){
-		//printf("[load] pml4 == NULL\n");
 		goto done;}
 	process_activate (thread_current ());
 
@@ -443,7 +432,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	t->running = file;
 	file_deny_write(file);
 
-	//printf("[load] file_deny_write after\n");
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -456,8 +444,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		printf ("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
-
-	//printf("[load] file_read finished\n");
 
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
@@ -513,26 +499,20 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	
-	//printf("[load] setup stack now starting..\n");
+
 	/* Set up stack. */
 	if (!setup_stack (if_)){
-		//printf("[load] setup sta failed\n");
 		goto done;
 		}
-	//printf("[load] setup stack is finished..\n");
+
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	//printf("[load] if_->rip.. \n");
-
-
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	//printf("[load] end safely \n");
 	success = true;
 
 done:
-	//printf("[load] end in done\n");
 	/* We arrive here whether the load is successful or not. */
 	return success;
 }
@@ -649,7 +629,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the USER_STACK */
 static bool
 setup_stack (struct intr_frame *if_) {
-	//printf("[setup_stack] start\n");
 	uint8_t *kpage;
 	bool success = false;
 
@@ -689,7 +668,6 @@ install_page (void *upage, void *kpage, bool writable) {
 
 bool
 lazy_load_segment (struct page *page, void *aux) {
-	//printf("[lazy load segment] 실행\n");
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 
@@ -698,7 +676,6 @@ lazy_load_segment (struct page *page, void *aux) {
 	struct load_info *arguments = aux;
 	struct file *file = arguments->file;
 	off_t ofs = arguments->ofs;
-	uint8_t* upage = arguments->upage;
 	uint32_t read_bytes = arguments->read_bytes;
 	uint32_t zero_bytes = arguments->zero_bytes;
 	bool writable = arguments->writable;
@@ -708,15 +685,11 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* Do calculate how to fill this page.
 	 * We will read PAGE_READ_BYTES bytes from FILE
 	 * and zero the final PAGE_ZERO_BYTES bytes. */
+
+	
 	size_t page_read_bytes = read_bytes;
 	size_t page_zero_bytes = zero_bytes;
 
-	/* Get a page of memory: use frame*/
-	if(page->frame->kva == NULL) {
-		palloc_free_page(page->frame->kva);
-		free(aux);
-		return false;
-	}
 
 	/* Load this page. */
 	if(file_read(file, page->frame->kva, page_read_bytes) != (int) page_read_bytes) {
@@ -724,13 +697,15 @@ lazy_load_segment (struct page *page, void *aux) {
 		free(aux);
 		return false;
 	}
-	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+
 	
+	if(page_get_type(page)!=VM_ANON){
+		memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+	}
 	if(page_get_type(page)!=VM_FILE) {
 		free(aux);
 	}
 	
-	//printf("[lazy load segment] end\n");
 	return true;
 
 }
@@ -752,7 +727,6 @@ lazy_load_segment (struct page *page, void *aux) {
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
-	//printf("[load segment] 실행\n");
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
@@ -786,14 +760,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* update ofs */
 		ofs += page_read_bytes;
 	}
-	//printf("[load segment] 끝\n");
 	return true;
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool
 setup_stack (struct intr_frame *if_) {
-	//printf("[setup_stack] 실행\n");
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
@@ -803,20 +775,13 @@ setup_stack (struct intr_frame *if_) {
 	}
 	success = vm_claim_page(stack_bottom);
 
-	//printf("[setup_stack] success: %d\n", success);
-
-	//printf("[setupt stack] succ?:%d\n", success);
 	/* TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 	//if_->rsp = USER_STACK;
 	if (success) {
 		if_->rsp = USER_STACK;
-		//printf("[setup_stack] if_->rsp %p\n",if_->rsp);
 	}
-
-	//printf("[setup_stack] end\n");
-	
 
 	return success;
 }
@@ -834,43 +799,38 @@ void tokenizer(char *file_name, char **argv, int *argc) {
 }
 
 void stacker(char **argv, int argc, struct intr_frame *if_) {
-	//printf("[staker] staker start\n");
 	/* stacking variables */
 	char *addrs[MAX_ARGS];
 	int i = argc-1;
 	while (i >= 0) {
-		// printf("stacking %s at %p\n", argv[i], if_->rsp-strlen(argv[i])-1);
 		int arglen = strlen(argv[i]);
 		if_->rsp -= arglen + 1;
 		strlcpy(if_->rsp, argv[i], arglen + 1);
 		addrs[i--] = if_->rsp;
 	}
-	//printf("[staker] staker while 1 end\n");
+
 	/* padding aligning */
 	while (if_->rsp % 8 != 0) {
-		// printf("padding 1 at %p\n", if_->rsp-1);
+
 		if_->rsp--;
 		*(uint8_t *)if_->rsp = 0;
 	}
-	//printf("[staker] staker while 2 end\n");
+
 	/* null pointer sentiel */
-	//printf("[staker] border at %p\n", if_->rsp-8);
+
 	if_->rsp -= 8;
 	*(uint64_t *)if_->rsp = 0;
-	//printf("[staker] 3 end\n");
+
 	/* stacking addresses */
 	i = argc-1;
 	while (i >= 0) {
-		//printf("[staker] staker while 3 end\n");
-		//printf("[staker] stacking %p at %p\n", addrs[i], if_->rsp-8);
+
 		if_->rsp -= 8;
 		*(uint64_t *)if_->rsp = (uint64_t)addrs[i--];
 	}
 	
 	/* fake return address */
-	//printf("[staker] fake return address at %p\n", if_->rsp-8);
-	//printf("[staker] 4 end\n");
 	if_->rsp -= 8;
 	*(uint64_t *)if_->rsp = 0;
-	//printf("[staker] staker end\n");
+
 }
