@@ -1,1 +1,4 @@
 .vscode/
+vm/build
+userprog/build
+memo/

@@ -92,9 +92,14 @@ struct hash_elem *
 hash_insert (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
 	struct hash_elem *old = find_elem (h, bucket, new);
+	//printf("[hash_insert] %p, %p, %p\n", bucket, old, new);
 
-	if (old == NULL)
+	if (old == NULL){
+		//printf("[hash_insert] old==NULL\n");
 		insert_elem (h, bucket, new);
+		//printf("[hash_insert] inserted finished\n");
+	}
+		
 
 	rehash (h);
 
@@ -121,6 +126,7 @@ hash_replace (struct hash *h, struct hash_elem *new) {
    null pointer if no equal element exists in the table. */
 struct hash_elem *
 hash_find (struct hash *h, struct hash_elem *e) {
+	//printf("[hash_find] h: %p /hash_elem: %p \n");
 	return find_elem (h, find_bucket (h, e), e);
 }
 
@@ -275,7 +281,7 @@ uint64_t
 hash_int (int i) {
 	return hash_bytes (&i, sizeof i);
 }
-
+
 /* Returns the bucket in H that E belongs in. */
 static struct list *
 find_bucket (struct hash *h, struct hash_elem *e) {

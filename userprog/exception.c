@@ -142,53 +142,21 @@ page_fault (struct intr_frame *f) {
 
 	int PHYS_BASE = 0x80040000;
 	int VIRTUAL_BASE = 0x00000000;
-	// printf("page fault at %p\n", fault_addr);
-	/* Handle kernel-mode page faults. */
-	if (!user) {
-		// printf("not user\n");
-		if (is_kernel_vaddr(fault_addr)) {
-			// printf("is kernel vaddr\n");
-			if (fault_addr >= PHYS_BASE) {
-				// printf("fault addr >= phys base\n");
-				exit(-1);
-			}
-			else {
-				// printf("fault addr < phys base\n");
-			}
-
-		}
-
-		else {
-			// printf("not kernel vaddr\n");
-			exit(-1);
-		}
-	}
-
-	/* Handle user-mode page faults. */
-	else {
-		// printf("user\n");
-		if (is_kernel_vaddr(fault_addr)) {
-			// printf("is kernel vaddr\n");
-			exit(-1);
-		}
-		else {
-			// printf("not kernel vaddr\n");
-			if (fault_addr <= VIRTUAL_BASE) {
-				// printf("fault addr <= virtual base\n");
-				exit(-1);
-			} else {
-				// printf("fault addr > virtual base\n");
-			}
-		}
-	}
 
 #ifdef VM
 	/* For project 3 and later. */
-	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
+	//printf("[page_fault] vm try handle fault start...\n");
+	if (vm_try_handle_fault (f, fault_addr, user, write, not_present)){
+		//printf("[page_fault] vm try handle fault ends...\n");
 		return;
+	}
 #endif
 
 	/* Count page faults. */
+	if(user) {
+		//printf("[page_fault] user error, goes to exit(-1)\n");
+		exit(-1);
+	}
 	page_fault_cnt++;
 
 	/* If the fault is true fault, show info and exit. */
