@@ -154,7 +154,7 @@ sema_test_helper (void *sema_) {
 		sema_up (&sema[1]);
 	}
 }
-
+
 /* Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks are not "recursive", that
    is, it is an error for the thread currently holding a lock to
@@ -211,7 +211,13 @@ lock_acquire (struct lock *lock) {
    if (lock->holder != NULL) {
       // put signal that this thread is waiting for the lock
       cur->waiting_lock = lock;
-      list_insert_ordered(&lock->holder->donations, &cur->donations_elem, donations_priority_more, NULL);
+
+      /* project 2 required(?)*/
+      // list_insert_ordered(&lock->holder->donations, &cur->donations_elem, donations_priority_more, NULL);
+      /* project 3 VM 
+      should be edited for page-merge-stk/mm, in this code*/
+      list_push_back(&lock->holder->donations, &cur->donations_elem);
+      
       // nested donation of priority
       if (!thread_mlfqs) {
          donate_priority();
